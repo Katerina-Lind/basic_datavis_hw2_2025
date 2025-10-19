@@ -1,0 +1,14 @@
+writeLines('project:
+  type: website
+  output-dir: docs
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    number-sections: true
+    code-fold: false
+    fig-width: 8
+    fig-height: 6
+    fig-dpi: 300
+', "_quarto.yml")

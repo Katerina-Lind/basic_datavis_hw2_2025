@@ -1,0 +1,431 @@
+---
+title: "BI_retarining_datavis_hw_2"
+date: "2025-09-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Подгрузка библиотек
+library(tidyverse)
+
+# Другие бибилотеки, на ваш вкус
+library(dplyr)
+library(forcats)
+library(janitor)
+library(ggstats)
+library(broom.helpers)
+library(treemapify)
+library(patchwork)
+library(ggmosaic)
+library(ggimage)
+library(tidyverse)
+library(grid)
+library(png)
+
+# Загрузка данных
+hogwarts <- read_csv("data/hogwarts_2025.csv")
+```
+
+## 1
+
+```{r forest_plot}
+
+df <- hogwarts |>
+  clean_names() |>
+  mutate(
+    house        = fct_relevel(factor(house), "Gryffindor"), # reference house
+    sex          = factor(sex),
+    blood_status = factor(blood_status)
+  ) |>
+  select(potions_exam, house, sex, blood_status, course) |>
+  tidyr::drop_na()
+
+
+mod_lm <- lm(
+  potions_exam ~ house + sex + blood_status + course,
+  data = df
+)
+
+p <- ggcoef_table(
+  mod_lm,
+  conf.level = 0.95,
+  show_p_values = TRUE,
+  add_reference_rows = TRUE,
+  variable_labels = c(
+    house = "House",
+    sex = "Sex",
+    blood_status = "Blood status",
+    course = "Course (numeric)"
+  )
+)
+
+p +
+  plot_annotation(
+    title = "Predictors of Potions exam score",
+    subtitle = "Linear regression on Hogwarts dataset\nPoints = β estimates; lines = 95% CI",
+    theme = theme(
+      plot.title.position = "plot",
+      plot.title   = element_text(hjust = 0.5),   # центрируем
+      plot.subtitle= element_text(hjust = 0.5)    # центрируем
+    )
+  )
+
+
+```
+
+Для анализа факторов, влияющих на результаты экзамена по Зельеварению, была использована линейная регрессия с категориальными предикторами: факультет, пол, происхождение, материал палочки, а также числовой переменной — год обучения.<br>
+<br>
+Модель показала, что единственным статистически значимым фактором является принадлежность к факультету Слизерин: при прочих равных условиях средний балл студентов этого факультета по Зельеварению примерно на 50 пунктов выше (β = 50.3, p < 0.001), чем у студентов Гриффиндора (выбранного в качестве референсной категории). Остальные факультеты не отличаются от Гриффиндора и друг от друга по среднему баллу за Зельеварение, так же как не выявлено значимых различий между студентами разного пола, года обучения, происхождения и с разными материалами волшебных палочек.<br>
+<br>
+Выбранный форест плот полезен для визуального представления результатов регрессионного анализа, поскольку он наглядно демонстрирует не только направление и величину эффектов, но и их статистическую значимость, что делает интерпретацию модели более понятной.
+
+
+
+## 2
+
+```{r treemap, width=800}
+
+df_tm2 <- hogwarts %>%
+  clean_names() %>%
+  mutate(
+    house = fct_infreq(house),
+    sex = factor(sex)
+  ) %>%
+  group_by(house, sex) %>%
+  summarise(
+    n_students = n(),
+    avg_result = mean(result, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(df_tm2, aes(area = n_students, fill = avg_result,
+                   label = paste(sex, "\n", n_students))) +
+  geom_treemap() +
+  geom_treemap_text(
+    reflow = TRUE,
+    place = "centre",
+    colour = "white",
+    size = 2.5,      
+    grow = TRUE,
+    min.size = 2.5,    
+  ) +
+  facet_wrap(~ house) +
+  scale_fill_viridis_c(name = "Average score", option = "C") +
+  labs(
+    title = "Destribution of students by sex and house",
+    subtitle = "Area = number of students; color = average score across subjects",
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold", size = 11)
+  )
+
+```
+
+*Мозаичный график* — это особый тип составленной столбчатой диаграммы.При отображении двух переменных ширина столбцов пропорциональна числу наблюдений в каждом уровне переменной, расположенной по горизонтальной оси,а высота сегментов внутри столбца пропорциональна числу наблюдений во второй переменной внутри соответствующего уровня первой переменной. Мозаичные графики позволяют наглядно показать взаимосвязи между переменными и дают визуальный способ сравнения групп.<br>
+<br>
+*Древовидный график* — это график, который отображает иерархические данные в виде набора прямоугольников,
+площадь каждого из которых пропорциональна количеству наблюдений или величине показателя в соответствующей категории. Если данные имеют несколько уровней вложенности, прямоугольники могут быть вложены друг в друга (например, факультет → пол → результат). Подходит для представления структуры «часть–целое», помогает увидеть, какие категории занимают наибольшую долю, и позволяет сравнивать величины между группами и подгруппами.
+<br>
+<br>
+
+Данный древовидный график отображает половую структуру каждого факультета и различия в общей успеваемости по всем предметам внутри факультетов. Значимые различия между полами наблюдаются только на факультете Слизерин: студентки этого факультета продемонстрировали самые высокие средние результаты, тогда как студенты — самые низкие по сравнению с представителями других факультетов.
+
+## 3
+
+```{r lollipop, fig.width=8, fig.height=11}
+
+df_lollipop <- hogwarts %>%
+  clean_names() %>%
+  filter(course == 5) %>%
+  mutate(
+    wand_core = fct_recode(
+      wand_core,
+      "Dragon heartstring" = "dragon heartstring",
+      "Phoenix feather"    = "phoenix feather",
+      "Unicorn hair"       = "unicorn hair"
+    ),
+    id = fct_reorder(as.factor(id), result, .desc = TRUE)
+  )
+
+
+mean_score <- mean(df_lollipop$result, na.rm = TRUE)
+median_score <- median(df_lollipop$result, na.rm = TRUE)
+
+top5 <- df_lollipop %>%
+  slice_max(order_by = result, n = 5)
+
+p <- ggplot(df_lollipop, aes(x = result, y = id, color = wand_core)) +
+  geom_segment(aes(x = 0, xend = result, y = id, yend = id),
+               linewidth = 0.6, color = "grey70") +
+  geom_point(size = 3) +
+   geom_vline(xintercept = mean_score, linetype = "dashed",
+             color = "blue", linewidth = 1) +
+  annotate("text", x = mean_score, y = 3,
+           label = paste0("Mean = ", round(mean_score, 1)),
+           color = "blue", size = 3.5, fontface = "italic", vjust = -1) +
+    geom_vline(xintercept = median_score, linetype = "dotted",
+             color = "purple", linewidth = 1) +
+  annotate("text", x = median_score, y = 8,
+           label = paste0("Median = ", round(median_score, 1)),
+           color = "purple", size = 3.5, fontface = "italic", vjust = -1) +
+ 
+  geom_text(
+    data = top5,
+    aes(label = paste0("ID ", id)),
+    color = "black", size = 2.8, hjust = -0.1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Dragon heartstring" = "red",
+      "Phoenix feather"    = "gold",
+      "Unicorn hair"       = "grey50"
+    ),
+    name = "Wand core"
+  ) +
+  labs(
+    title = "Lollipop plot of total scores for 5th-year students",
+    subtitle = "Dashed line = mean; dotted line = median; color = wand core material",
+    x = "Total score for the year",
+    y = "Student ID"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "top",
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(size = 7)
+  )
+
+p
+
+```
+
+
+*Леденцовый график* показывает широкий диапазон итоговых баллов и умеренный разброс успеваемости среди студентов пятого курса. Материал сердцевины волшебной палочки не оказывает очевидного систематического влияния на итоговые результаты.<br>
+<br>
+
+Такой тип графика удобен для наглядного сравнения ранжированных значений и одновременного отображения дополнительной категориальной переменной — в данном случае материала палочки.
+
+## 4
+
+```{r weekly_trend, fig.width=8, fig.height=6}
+
+df_weekly <- hogwarts %>%
+  clean_names() %>%
+  pivot_longer(starts_with("week_"), names_to = "week", values_to = "score") %>%
+  mutate(week = as.numeric(stringr::str_extract(week, "\\d+"))) %>%
+  group_by(week) %>%
+  summarise(
+    mean_score = mean(score, na.rm = TRUE),
+    sd_score   = sd(score,   na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+   mutate(
+    ymin = pmin(mean_score, 0),
+    ymax = pmax(mean_score, 0)
+  )
+
+
+ggplot(df_weekly, aes(week, mean_score)) +
+   geom_ribbon(aes(ymin = ymin, ymax = ymax),
+              fill = "#4575b4", alpha = 0.15) +
+   geom_line(color = "#4575b4", linewidth = 1) +
+   geom_point(size = 3, color = "#4575b4") +
+   geom_errorbar(aes(ymin = mean_score - sd_score, ymax = mean_score + sd_score),
+                width = 0.3, color = "gray50") +
+   geom_smooth(method = "lm", se = TRUE,
+              color = "#d73027", fill = "#f4a582", linewidth = 1) +
+   labs(
+    title = "Average score across all students",
+    subtitle = "Average score (mean) ± SD; red line — linear trend",
+    x = "Week",
+    y = "Average score"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
+  )
+
+```
+
+Представленный график очень сложно читается и содержит ошибки, которые искажают общую картину успеваемости. Первое, что бросается в глаза - это фон графика, который затрудняет его восприятие. Фон необходимо убрать.Улучшить читаемость заголовка, убрать субъективные комментарии с графика, убедиться, что читателю понятен смысл используемых цветов (что они обозначают). Использовать понятные названия осей и метрик, используемых на графике. Оптимизировать значения на оси х (укрупнить). Объяснить, как считалось среднее, проводилась ли группировка по стратифицирующей переменной или нет.<br
+<br>>
+Во-вторых, на графике предствалены 6 недель, тогда как в отчете делается вывод об учебном годе. Необходимо добавить еще 36 недель для получения объективной картины динамики успеваемости.<br>
+<br>
+Я предлагаю проанализировать головую успеваемость всех студентов с помощью визуального изображения тренда средних баллов всех студентов за учебный год. В среднем студенты Хогвартса набирают примерно одинаковое количество баллов из недели в неделю, однако к концу учебного года наблюдается лёгкое снижение среднего значения. Статистически, средние оценки не отличаются друг от друга. При этом разброс оценок между студентами остаётся высоким на всём протяжении года, что указывает на выраженные индивидуальные различия в результатах.
+
+## 5
+
+```{r recreation}
+
+library(tidyverse)
+
+hint <- readr::read_csv("podskazka2.csv", show_col_types = FALSE)
+
+ggplot(hint, aes(x = X, y = Y)) +
+  geom_point(size = 3, shape = 21, fill = "tomato", colour = "black", alpha = 0.9) +
+  labs(
+    title = "Scatterplot from podskazka2.csv",
+    x = "X", y = "Y"
+  ) +
+  theme_minimal(base_size = 12)
+
+
+
+df_weekly <- hogwarts %>%
+  clean_names() %>%
+  pivot_longer(starts_with("week_"), names_to = "week", values_to = "score") %>%
+  mutate(week = as.numeric(stringr::str_extract(week, "\\d+"))) %>%
+  group_by(week) %>%
+  summarise(
+    mean_score = mean(score, na.rm = TRUE),
+    sd_score   = sd(score,   na.rm = TRUE),
+    .groups = "drop"
+  )
+
+bg_path <- "images/task_2_4.png"  # <- подставь свой путь: "images/fire_bear_2.png" и т.п.
+bg_img  <- readPNG(bg_path)
+bg_grob <- rasterGrob(bg_img, width = unit(1, "npc"), height = unit(1, "npc"))
+
+zones <- tibble(
+  xmin = c(1, 6, 11, 16, 21, 26, 31, 36),
+  xmax = c(6, 11, 16, 21, 26, 31, 36, 41),
+  fill = c("#39ff14", "#ff66aa", "#66ccff", "#ffad60",
+           "#66a3ff", "#ff6666", "#a0ffa0", "#000000"),
+  alpha = c(.20, .15, .12, .18, .12, .18, .15, .25)
+)
+
+ggplot() +
+    annotation_custom(bg_grob, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf) +
+
+    geom_rect(
+    data = zones,
+    aes(xmin = xmin, xmax = xmax, ymin = -12, ymax = 12),
+    inherit.aes = FALSE,
+    fill = zones$fill, alpha = zones$alpha
+  ) +
+
+   geom_col(
+    data = df_weekly,
+    aes(x = week, y = mean_score),
+    width = 0.95, fill = "springgreen3", alpha = .55
+  ) +
+
+   geom_errorbar(
+    data = df_weekly,
+    aes(x = week, ymin = mean_score - 9, ymax = mean_score + 9),
+    width = .15, colour = "black", alpha = .6
+  ) +
+
+  # Чёрная «зигзаго-линия»: искусственно усиливаем «падение»
+  geom_line(
+    data = df_weekly %>%
+      mutate(z = scales::rescale(mean_score, to = c(-10, 10))),
+    aes(x = week, y = z),
+    colour = "black", linewidth = 1.1, alpha = .9
+  ) +
+
+   annotate(
+    "segment", x = 2, xend = 40, y = 11.5, yend = -11.5,
+    colour = "red3", linewidth = 2.6,
+    arrow = arrow(type = "closed", length = unit(10, "pt"))
+  ) +
+
+    annotate(
+    "label", x = 7, y = 7.5,
+    label = "В начале учебного года педагоги\nрасположены мотивировать учащихся\nи дают им большее количество баллов",
+    size = 4, label.size = 0.8, label.r = unit(6, "pt"),
+    fill = "white", colour = "darkgreen"
+  ) +
+  annotate(
+    "label", x = 35, y = -7.5,
+    label = "К концу года учителя применяют всё больше\nрепрессивных мер в виде лишения баллов",
+    size = 4, label.size = 0.8, label.r = unit(6, "pt"),
+    fill = "white", colour = "red4"
+  ) +
+
+  scale_x_continuous(breaks = seq(0, 40, 5), limits = c(0.5, 40.5)) +
+  scale_y_continuous(limits = c(-12, 12)) +
+
+  labs(
+    title    = "Эмоциональное выгорание преподавателей или лень учеников?",
+    subtitle = "Dramatical decreasing of mean score for every subsequent week in Hogwarts",
+    x = "fct_reorder(week_number, ms, .desc = TRUE)",  # намеренно «неправильная» подпись
+    y = "colour\nblue"                                 # намеренно «мусорная» подпись
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_line(colour = "black", linewidth = .2),
+    panel.grid.minor.x = element_line(colour = "black", linewidth = .1),
+    panel.grid.major.y = element_line(colour = "grey70"),
+    panel.background   = element_rect(fill = NA, colour = NA),
+    plot.title         = element_text(colour = "black", face = "bold", size = 16),
+    plot.subtitle      = element_text(colour = "firebrick", face = "italic", size = 12),
+    axis.text.y        = element_text(angle = 90, vjust = .5, size = 7)
+  )
+
+
+
+
+```
+Представлена попытка воспроизвести "плохой пример" из задания. На график добаввлены визуальные шумы, что делает его нечитаемым.
+
+
+## 6
+
+```{r patchwork, fig.width=16, fig.height=25}
+set.seed(2025)
+
+colours_ <- colours()
+res_colours <- colours_[colours_ |> str_detect("grey|gray|black|white", negate = TRUE)]|>  
+  sample(size = 36)
+
+df_scores <- hogwarts %>%
+  clean_names() %>%
+  select(result) %>%
+  drop_na()
+
+make_hist <- function(col, data = df_scores, bins = 30) {
+  ggplot(data, aes(x = result)) +
+    geom_histogram(
+      bins = bins,
+      fill = col,
+      color = "white",
+      linewidth = 0.4,
+      boundary = 0
+    ) +
+    geom_vline(xintercept = mean(data$result, na.rm = TRUE),
+               linetype = "dashed", color = "black", linewidth = 0.6) +
+    ggtitle(col) +
+    labs(x = "Total score", y = "Count") +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(size = 9, hjust = 0.5, face = "bold"),
+      axis.title = element_text(size = 9),
+      axis.text = element_text(size = 7),
+      panel.grid.minor = element_blank(),
+      plot.margin = margin(5, 5, 5, 5)
+    )
+}
+
+plots <- purrr::map(res_colours, make_hist)
+
+panel <- wrap_plots(plots, ncol = 3) +
+  plot_annotation(
+    title = "Distribution of Yearly Total Scores (36 color variants)",
+    subtitle = "Each histogram uses a color from res_colours",
+    theme = theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5, size = 11)
+    )
+  )
+
+panel
+
+
+```

@@ -1,0 +1,59 @@
+---
+title: "BI_retarining_datavis_hw_2"
+date: "2025-09-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Подгрузка библиотек
+library(tidyverse)
+
+# Другие бибилотеки, на ваш вкус
+
+# Загрузка данных
+hogwarts <- read_csv("data/hogwarts_2025.csv")
+```
+
+## 1
+
+```{r}
+
+```
+
+## 2
+
+```{r}
+
+```
+
+## 3
+
+```{r}
+
+```
+
+## 4
+
+```{r}
+
+```
+
+## 5
+
+```{r fig.width=8, fig.height=25}
+
+```
+
+## 6
+
+```{r fig.width=16, fig.height=10}
+set.seed(2025)
+
+colours_ <- colours()
+res_colours <- colours_[colours_ |> str_detect("grey|gray|black|white", negate = TRUE)]|>  
+  sample(size = 36)
+
+
+```
